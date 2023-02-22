@@ -8,16 +8,16 @@ from rich.theme import Theme
 
 class Console:
     __theme = Theme({
-        'info': 'white',
-        'info_b': 'white bold',
+        'info': 'green',
+        'info_b': 'green bold',
         'debug': 'cyan',
         'debug_b': 'cyan bold',
         'warn': 'yellow',
         'warn_b': 'yellow bold',
         'error': 'red',
         'error_b': 'red bold',
-        'success': 'green',
-        'success_b': 'green bold',
+        'success': 'bold #3a85d1',
+        'success_b': 'bold #3a85d1',
     })
 
     __console = RichConsole(theme=__theme)

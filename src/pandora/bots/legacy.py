@@ -297,9 +297,9 @@ class ChatBot:
             choices.append('p')
             Console.warn('  p. << Previous page')
 
-        Console.warn('  t?. Set title for the conversation, eg: t1')
-        Console.warn('  d?. Delete the conversation, eg: d1')
-        Console.warn('  c. ** Start new chat')
+        Console.info('  t?. Set title for the conversation, eg: t1')
+        Console.info('  d?. Delete the conversation, eg: d1')
+        Console.info('  c. ** Start new chat')
 
         while True:
             choice = Prompt.ask('Your choice', choices=choices, show_choices=False)
