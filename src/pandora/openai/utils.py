@@ -16,8 +16,8 @@ class Console:
         'warn_b': 'yellow bold',
         'error': 'red',
         'error_b': 'red bold',
-        'success': 'bold #3a85d1',
-        'success_b': 'bold #3a85d1',
+        'success': 'bold blue',
+        'success_b': 'bold blue',
     })
 
     __console = RichConsole(theme=__theme)
