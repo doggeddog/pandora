@@ -52,10 +52,11 @@ class ChatBot:
             prompt = self.__get_input()
             if not prompt:
                 continue
-
-            if '/' == prompt[0]:
+            elif '/' == prompt[0]:
                 self.__process_command(prompt)
                 continue
+            else:
+                Console.clear()
 
             self.__talk(prompt)
 
@@ -165,8 +166,8 @@ class ChatBot:
             Console.error('#### Conversation has not been created.')
             return
 
-        if not Confirm.ask('Are you sure?', default=False):
-            return
+        # if not Confirm.ask('Are you sure?', default=False):
+        #     return
 
         if self.chatgpt.del_conversation(state.conversation_id):
             self.run()
