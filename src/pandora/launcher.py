@@ -2,20 +2,24 @@
 
 import argparse
 import os
-import sys
-import traceback
 
-from appdirs import user_config_dir
+from loguru import logger
 from rich.prompt import Prompt, Confirm
 
 from . import __version__
 from .bots.legacy import ChatBot as ChatBotLegacy
+from .bots.server import ChatBot as ChatBotServer
+from .exts import sentry
+from .exts.config import USER_CONFIG_DIR
+from .exts.hooks import hook_except_handle
+from .migrations import migrate
 from .openai.api import ChatGPT
 from .openai.auth import Auth0
 from .openai.utils import Console
+from .turbo.chat import TurboGPT
 
 if 'nt' == os.name:
-    import pyreadline as readline
+    import pyreadline3 as readline
 else:
     import readline
 
@@ -31,11 +35,10 @@ def read_access_token(token_file):
 
 
 def save_access_token(access_token):
-    config_dir = user_config_dir('Pandora-ChatGPT')
-    token_file = os.path.join(config_dir, 'access_token.dat')
+    token_file = os.path.join(USER_CONFIG_DIR, 'access_token.dat')
 
-    if not os.path.exists(config_dir):
-        os.makedirs(config_dir)
+    if not os.path.exists(USER_CONFIG_DIR):
+        os.makedirs(USER_CONFIG_DIR)
 
     with open(token_file, 'w') as f:
         f.write(access_token)
@@ -46,8 +49,8 @@ def save_access_token(access_token):
         print()
 
 
-def confirm_access_token(token_file=None):
-    app_token_file = os.path.join(user_config_dir('Pandora-ChatGPT'), 'access_token.dat')
+def confirm_access_token(token_file=None, silence=False):
+    app_token_file = os.path.join(USER_CONFIG_DIR, 'access_token.dat')
 
     app_token_file_exists = os.path.isfile(app_token_file)
     if app_token_file_exists and __show_verbose:
@@ -65,8 +68,9 @@ def confirm_access_token(token_file=None):
         return access_token, True
 
     if app_token_file_exists:
-        confirm = Prompt.ask('A saved access token has been detected. Do you want to use it?',
-                             choices=['y', 'n', 'del'], default='y')
+        confirm = 'y' if silence else Prompt.ask('A saved access token has been detected. Do you want to use it?',
+                                                 choices=['y', 'n', 'del'], default='y')
+
         if 'y' == confirm:
             return read_access_token(app_token_file), False
         elif 'del' == confirm:
@@ -82,15 +86,14 @@ def main():
         '''
         Pandora - A command-line interface to ChatGPT
         Github: https://github.com/pengzhile/pandora
-        Version: {}
-        '''.format(__version__),
+        Version: {}'''.format(__version__), end=''
     )
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-p',
         '--proxy',
-        help='Use a proxy. Format: http://user:pass@ip:port',
+        help='Use a proxy. Format: protocol://user:pass@ip:port',
         required=False,
         type=str,
         default=None,
@@ -104,6 +107,28 @@ def main():
         default=None,
     )
     parser.add_argument(
+        '-s',
+        '--server',
+        help='Start as a proxy server. Format: ip:port, default: 127.0.0.1:8008',
+        required=False,
+        type=str,
+        default=None,
+        action='store',
+        nargs='?',
+        const='127.0.0.1:8008',
+    )
+    parser.add_argument(
+        '-a',
+        '--api',
+        help='Use gpt-3.5-turbo chat api. Note: OpenAI will bill you.',
+        action='store_true',
+    )
+    parser.add_argument(
+        '--sentry',
+        help='Enable sentry to send error reports when errors occur.',
+        action='store_true',
+    )
+    parser.add_argument(
         '-v',
         '--verbose',
         help='Show exception traceback.',
@@ -112,7 +137,15 @@ def main():
     args, _ = parser.parse_known_args()
     __show_verbose = args.verbose
 
-    access_token, need_save = confirm_access_token(args.token_file)
+    Console.debug_b(''', Mode: {}, Engine: {}
+        '''.format('server' if args.server else 'cli', 'turbo' if args.api else 'free'))
+
+    if args.sentry:
+        sentry.init(args.proxy)
+
+    migrate.do_migrate()
+
+    access_token, need_save = confirm_access_token(args.token_file, args.server)
     if not access_token:
         Console.info_b('Please enter your email and password to log in ChatGPT!')
         email = Prompt.ask('  Email')
@@ -120,19 +153,30 @@ def main():
         Console.warn('### Do login, please wait...')
         access_token = Auth0(email, password, args.proxy).auth()
 
-    if need_save and Confirm.ask('Do you want to save your access token for the next login?', default=False):
-        save_access_token(access_token)
+    if need_save:
+        if args.server or Confirm.ask('Do you want to save your access token for the next login?', default=True):
+            save_access_token(access_token)
 
-    ChatBotLegacy(ChatGPT(access_token, args.proxy)).run()
+    if args.api:
+        chatgpt = TurboGPT(access_token, args.proxy)
+    else:
+        chatgpt = ChatGPT(access_token, args.proxy)
+
+    if args.server:
+        return ChatBotServer(chatgpt, args.verbose, args.sentry).run(args.server)
+
+    ChatBotLegacy(chatgpt).run()
 
 
 def run():
+    hook_except_handle()
+
     try:
         main()
-    except KeyboardInterrupt:
-        Console.info('Bye...')
-        sys.exit(0)
     except Exception as e:
         Console.error_bh('### Error occurred: ' + str(e))
+
         if __show_verbose:
-            Console.print(traceback.format_exc())
+            logger.exception('Exception occurred.')
+
+        sentry.capture(e)
