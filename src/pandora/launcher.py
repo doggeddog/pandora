@@ -2,6 +2,7 @@
 
 import argparse
 import os
+from os import getenv
 
 from loguru import logger
 from rich.prompt import Prompt, Confirm
@@ -82,11 +83,21 @@ def confirm_access_token(token_file=None, silence=False):
 def main():
     global __show_verbose
 
+    Console.debug_b('''
+   ▄▀▀▄▀▀▀▄  ▄▀▀█▄   ▄▀▀▄ ▀▄  ▄▀▀█▄▄   ▄▀▀▀▀▄   ▄▀▀▄▀▀▀▄  ▄▀▀█▄  
+  █   █   █ ▐ ▄▀ ▀▄ █  █ █ █ █ ▄▀   █ █      █ █   █   █ ▐ ▄▀ ▀▄ 
+  ▐  █▀▀▀▀    █▄▄▄█ ▐  █  ▀█ ▐ █    █ █      █ ▐  █▀▀█▀    █▄▄▄█ 
+     █       ▄▀   █   █   █    █    █ ▀▄    ▄▀  ▄▀    █   ▄▀   █ 
+   ▄▀       █   ▄▀  ▄▀   █    ▄▀▄▄▄▄▀   ▀▀▀▀   █     █   █   ▄▀  
+  █         ▐   ▐   █    ▐   █     ▐           ▐     ▐   ▐   ▐   
+  ▐                 ▐        ▐                                   
+       ''')
+
     Console.debug_b(
         '''
-        Pandora - A command-line interface to ChatGPT
-        Github: https://github.com/pengzhile/pandora
-        Version: {}'''.format(__version__), end=''
+          Pandora - A command-line interface to ChatGPT
+          Github: https://github.com/pengzhile/pandora
+          Version: {}'''.format(__version__), end=''
     )
 
     parser = argparse.ArgumentParser()
@@ -148,8 +159,8 @@ def main():
     access_token, need_save = confirm_access_token(args.token_file, args.server)
     if not access_token:
         Console.info_b('Please enter your email and password to log in ChatGPT!')
-        email = Prompt.ask('  Email')
-        password = Prompt.ask('  Password', password=True)
+        email = getenv('OPENAI_EMAIL') or Prompt.ask('  Email')
+        password = getenv('OPENAI_PASSWORD') or Prompt.ask('  Password', password=True)
         Console.warn('### Do login, please wait...')
         access_token = Auth0(email, password, args.proxy).auth()
 
