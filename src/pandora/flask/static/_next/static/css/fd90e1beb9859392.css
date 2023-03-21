@@ -3,6 +3,6 @@
 .markdown.prose.w-full.break-words {
     min-height: 300px;
 }
-.md\:h-48 {
-    height: none !important;
+.w-full.h-32.md\:h-48.flex-shrink-0 {
+    height: 6rem !important;
 }
