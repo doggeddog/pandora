@@ -35,9 +35,12 @@ class State:
 class ChatBot:
     def __init__(self, chatgpt):
         self.chatgpt = chatgpt
+        self.token_key = None
         self.state = None
 
     def run(self):
+        self.token_key = self.__choice_token_key()
+
         conversation_base = self.__choice_conversation()
         if conversation_base:
             self.__load_conversation(conversation_base['id'])
@@ -157,7 +160,7 @@ class ChatBot:
 
     def __print_access_token(self):
         Console.warn_b('\n#### Your access token (keep it private)')
-        Console.warn(self.chatgpt.access_token)
+        Console.warn(self.chatgpt.get_access_token(token_key=self.token_key))
         print()
 
     def __clear_screen(self):
@@ -192,7 +195,7 @@ class ChatBot:
             Console.error('#### Title too long.')
             return
 
-        if self.chatgpt.set_conversation_title(state.conversation_id, new_title):
+        if self.chatgpt.set_conversation_title(state.conversation_id, new_title, token=self.token_key):
             state.title = new_title
             Console.debug('#### Set title success.')
         else:
@@ -202,7 +205,7 @@ class ChatBot:
         if not Confirm.ask('Are you sure?', default=False):
             return
 
-        if self.chatgpt.clear_conversations():
+        if self.chatgpt.clear_conversations(token=self.token_key):
             self.run()
         else:
             Console.error('#### Clear conversations failed.')
@@ -215,7 +218,7 @@ class ChatBot:
         # if not Confirm.ask('Are you sure?', default=False):
         #     return
 
-        if self.chatgpt.del_conversation(state.conversation_id):
+        if self.chatgpt.del_conversation(state.conversation_id, token=self.token_key):
             self.run()
         else:
             Console.error('#### Delete conversation failed.')
@@ -227,7 +230,7 @@ class ChatBot:
         self.state = State(conversation_id=conversation_id)
 
         nodes = []
-        result = self.chatgpt.get_conversation(conversation_id)
+        result = self.chatgpt.get_conversation(conversation_id, token=self.token_key)
         current_node_id = result['current_node']
 
         while True:
@@ -289,14 +292,15 @@ class ChatBot:
             self.state.user_prompt = ChatPrompt(prompt, parent_id=self.state.chatgpt_prompt.message_id)
 
         status, _, generator = self.chatgpt.talk(prompt, self.state.model_slug, self.state.user_prompt.message_id,
-                                                 self.state.user_prompt.parent_id, self.state.conversation_id)
+                                                 self.state.user_prompt.parent_id, self.state.conversation_id,
+                                                 token=self.token_key)
         self.__print_reply(status, generator)
 
         self.state.user_prompts.append(self.state.user_prompt)
 
         if first_prompt:
             new_title = self.chatgpt.gen_conversation_title(self.state.conversation_id, self.state.model_slug,
-                                                            self.state.chatgpt_prompt.message_id)
+                                                            self.state.chatgpt_prompt.message_id, token=self.token_key)
             self.state.title = new_title
             Console.debug_bh('#### Title generated: ' + new_title)
 
@@ -307,7 +311,7 @@ class ChatBot:
 
         status, _, generator = self.chatgpt.regenerate_reply(state.user_prompt.prompt, state.model_slug,
                                                              state.conversation_id, state.user_prompt.message_id,
-                                                             state.user_prompt.parent_id)
+                                                             state.user_prompt.parent_id, token=self.token_key)
         print()
         Console.success_b('ChatGPT:')
         self.__print_reply(status, generator)
@@ -318,7 +322,7 @@ class ChatBot:
             return
 
         status, _, generator = self.chatgpt.goon(state.model_slug, state.chatgpt_prompt.message_id,
-                                                 state.conversation_id)
+                                                 state.conversation_id, token=self.token_key)
         print()
         Console.success_b('ChatGPT:')
         self.__print_reply(status, generator)
@@ -355,7 +359,7 @@ class ChatBot:
         print('\n')
 
     def __choice_conversation(self, page=1, page_size=20):
-        conversations = self.chatgpt.list_conversations((page - 1) * page_size, page_size)
+        conversations = self.chatgpt.list_conversations((page - 1) * page_size, page_size, token=self.token_key)
         if not conversations['total']:
             return None
 
@@ -384,6 +388,11 @@ class ChatBot:
         Console.warn('  d?.\tDelete the conversation, eg: d1')
         Console.warn('  dd.\t!! Clear all conversations')
         Console.warn('  r.\tRefresh conversation list')
+
+        if len(self.chatgpt.list_token_keys()) > 1:
+            choices.append('k')
+            Console.warn('  k.\tChoice access token')
+
         Console.warn('  c.\t** Start new chat')
 
 
@@ -391,6 +400,10 @@ class ChatBot:
             choice = Prompt.ask('Your choice', choices=choices, show_choices=False)
             if 'c' == choice:
                 return None
+
+            if 'k' == choice:
+                self.run()
+                return
 
             if 'r' == choice:
                 return self.__choice_conversation(page, page_size)
@@ -415,8 +428,27 @@ class ChatBot:
 
             return items[int(choice) - 1]
 
+    def __choice_token_key(self):
+        tokens = self.chatgpt.list_token_keys()
+
+        size = len(tokens)
+        if 1 == size:
+            return None
+
+        choices = ['r']
+        Console.info_b('Choice access token:')
+        for idx, item in enumerate(tokens):
+            number = str(idx + 1)
+            choices.append(number)
+            Console.info('  {}.\t{}'.format(number, item))
+
+        while True:
+            choice = Prompt.ask('Your choice', choices=choices, show_choices=False)
+
+            return tokens[int(choice) - 1]
+
     def __choice_model(self):
-        models = self.chatgpt.list_models()
+        models = self.chatgpt.list_models(token=self.token_key)
 
         size = len(models)
         if 1 == size:
